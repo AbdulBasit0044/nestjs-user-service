@@ -1,0 +1,7 @@
+version: '3.7'
+
+services:
+  test_db:
+    image: mongo:4.2.8
+    ports:
+      - '27016:27017'

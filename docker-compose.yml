@@ -1,0 +1,41 @@
+version: '3.7'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Uncomment this line in case you are having network issues to install dependencies
+      # args:
+      #   YARN_TIMEOUT: '200000'
+    container_name: template-api
+    image: template-api
+    # Uncomment this line in case you are in M1
+    # platform: linux/amd64
+    ports:
+      - '4000:4000'
+    networks:
+      - 'app-network'
+    depends_on:
+      - db
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - MONGO_URI=mongodb://db:27017/template-api
+
+  db:
+    image: mongo:4.2.8
+    restart: unless-stopped
+    volumes:
+      - mongodb-data:/data/db
+    ports:
+      - '27014:27017'
+    networks:
+      - 'app-network'
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mongodb-data:

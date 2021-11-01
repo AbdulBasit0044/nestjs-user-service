@@ -1,0 +1,36 @@
+version: '3.7'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: template-api-dev
+    image: template-api-dev
+    # Uncomment this line in case you are in M1
+    # platform: linux/amd64
+    ports:
+      - '4000:4000'
+    volumes:
+      - .:/usr/src/app
+    networks:
+      - 'app-network'
+    depends_on:
+      - db
+
+  db:
+    image: mongo:4.2.8
+    restart: unless-stopped
+    ports:
+      - '27015:27017'
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - 'app-network'
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mongodb-data:
