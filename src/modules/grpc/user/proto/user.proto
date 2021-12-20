@@ -1,0 +1,191 @@
+syntax = "proto3";
+
+package user;
+
+service UserGrpcService {
+	rpc GetUserById (GetUserByIdParams) returns (GetUserResponse) {}
+  rpc GetUsersById (GetUsersByIdParams) returns (GetUsersResponse) {}
+	rpc GetUserByEmail (GetUserByEmailParams) returns (GetUserResponse) {}
+  rpc GetUsersByEmail (GetUsersByEmailParams) returns (GetUsersResponse) {}
+  rpc GetAllUsers (GetAllUsersParams) returns (PaginatedUserList) {}
+	rpc UpdateUser (UpdateUserParams) returns (UpdateUserResponse) {}
+  rpc DeleteUserById (DeleteUserByIdParams) returns (DeleteUserByIdResponse) {}
+	rpc ReactivateUser (ReactivateUserParams) returns (ReactivateUserResponse) {}
+	rpc DeactivateUser (DeactivateUserParams) returns (DeactivateUserResponse) {}
+}
+
+message GoogleAuth {
+  string access_token = 1;
+  string token_type = 2;
+  string id_token = 3;
+  int32 expires_at = 5;
+  string refresh_token = 6;
+  string type = 7;
+  }
+
+message OfficeAuth {
+  string access_token = 1;
+  string token_type = 2;
+  string scope = 3;
+  string refresh_token = 4;
+  string grant_type = 5;
+  string type = 6;
+  int32 expires_at = 7;
+  
+}
+message zoomSettings {
+  bool nobot = 1;
+}
+
+message Profile {
+  string name = 1;
+}
+
+message User {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+	optional string photoUrl = 4;
+  optional int32 freeUploadPoints = 5;
+  repeated string freeUploadsClaimed = 6;
+  optional string picture = 8;
+  optional string sendNotesTo = 9;
+  string autoJoin = 10;
+  optional string privacy = 11;
+  repeated string joinRules = 12;
+  repeated string barRules = 13;
+  optional string paidUser = 14;
+  optional string dispatch = 15;
+  optional string recordingNotification = 16;
+  optional string customBotName = 17;
+  optional GoogleAuth gauth = 18;
+  optional OfficeAuth officeAuth = 19;
+  optional int32 numberNotes = 20;
+  optional int32 notesInjected = 21;
+  optional int32 numMeetingsWithNotes = 22;
+  optional string referralCode = 23;
+  optional bool approvedTerms = 24;
+  optional string industry = 25;
+  optional string skipEmail = 26;
+  optional float minutesConsumed = 27;
+  optional float transcriptionMinutesConsumed = 28;
+  optional bool cancelledAccount = 29;
+  optional bool isAdmin = 30;
+  optional bool requiresLogin = 31;
+  optional string parseDictionaryId = 32;
+  repeated string dictionaries = 33;
+  optional Profile profile = 34;
+  optional string createdAt = 35;
+  optional string updatedAt = 36;
+  optional string meetingTier = 37;
+  optional string oldMeetingTier = 38;
+  repeated string beforeCommands = 39;
+  repeated string afterCommands = 40;
+  optional zoomSettings zoom = 41;
+  repeated string autoJoinTeamEmail = 42;
+  optional string paidMeetingsUser = 43;
+  optional string timezone = 44;
+  optional string googleId = 45;
+  optional string outlookId = 46;
+  optional string stripeCustomer = 47;
+  optional string stripePlanId = 48;
+  optional string stripePlanNickname = 49;
+  optional string stripeSubscriptionId  = 50;
+  repeated string paywallsHit = 51;
+  optional string lastLogin = 52;
+  optional string cancelReason = 53;
+  optional string txReferral = 54;
+  optional string sbReferral = 55;
+  optional string signUpSource = 56;
+}
+
+message GetUserByIdParams {
+  string id = 1;
+  repeated string select = 2;
+}
+
+message GetUserByEmailParams {
+  string email = 1;
+  repeated string select = 2;
+}
+
+message GetUserResponse {
+  optional User data = 1;
+}
+
+message GetUsersResponse {
+  repeated User data = 1;
+}
+
+message DeleteUserByIdParams {
+  string id = 1;
+}
+
+message GetUsersByIdParams {
+  repeated string ids = 1;
+  repeated string select = 2;
+}
+
+message GetUsersByEmailParams {
+  repeated string emails = 1;
+  repeated string select = 2;
+}
+
+message GetAllUsersParams {
+  repeated string select = 1;
+  optional int32 page = 2;
+  optional int32 pageSize = 3;
+  optional string sort = 4;
+  optional string order = 5;
+}
+
+message DeleteUserByIdResponse {
+  optional bool data = 1;
+}
+
+message ReactivateUserParams {
+  string id = 1;
+}
+
+message DeactivateUserParams {
+  string id = 1;
+}
+
+message DeactivateUserResponse {
+  optional bool data = 1;
+}
+
+message UpdateUserParams {
+  string id = 1;
+  UpdateUserDTO data = 2;
+}
+
+message UpdateUserDTO {
+  optional string name = 1;
+	optional string photoUrl = 2;
+  optional string timezone = 3;
+  // TODO add more fields in here based on future requirements
+}
+
+message UpdateUserResponse {
+  optional User data = 1;
+}
+
+message ReactivateUserResponse {
+  optional User data = 1;
+}
+
+message PageInfo {
+  int32 currentPage = 1;
+  int32 perPage = 2;
+  int32 itemCount = 3;
+  int32 pageCount = 4;
+  bool hasNextPage = 5;
+  bool hasPreviousPage = 6;
+}
+
+message PaginatedUserList {
+  optional PageInfo pageInfo = 1;
+  optional int32 count = 2;
+  repeated User items = 3;
+}
