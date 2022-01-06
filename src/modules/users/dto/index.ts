@@ -1,0 +1,5 @@
+export * from './sign-up.dto'
+export * from './update-user.dto'
+export * from './google-auth-signup.dto'
+export * from './ms-office-auth-signup.dto'
+export * from './auth-registration.dto'
