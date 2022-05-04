@@ -1,0 +1,179 @@
+import { join } from 'path'
+import { INestApplication } from '@nestjs/common'
+import { Test, TestingModule } from '@nestjs/testing'
+import { getModelToken } from '@nestjs/mongoose'
+import * as GRPC from '@grpc/grpc-js'
+import * as ProtoLoader from '@grpc/proto-loader'
+import faker from 'faker'
+import { Model } from 'mongoose'
+import moment from 'moment'
+import { generateSecret, generateSignature } from '@common/utils'
+import { PubSubService } from '@modules/global-configs/services'
+import { User } from '@modules/users/models'
+import { Acl, AclStatus } from '@modules/acl/models'
+import { getGrpcOptions } from '@modules/grpc'
+import { createTestAcl } from '@modules/acl/fixtures'
+import { AppModule } from '../src/app.module'
+
+const signUpInput = {
+  outlookId: faker.datatype.string(),
+  name: 'Test User # 2',
+  email: faker.internet.email(),
+  autoJoin: 'manual'
+}
+
+const serviceName = faker.company.companyName()
+const secret = generateSecret()
+
+describe('AclResolver (e2e)', () => {
+  let app: INestApplication
+  let createdUser: User
+  let client: any
+  let protoGRPC: any
+  let UserModel: Model<User>
+  let AclModel: Model<Acl>
+  let payload: any
+
+  const activeAcl = createTestAcl({ secret, service: serviceName, status: AclStatus.ACTIVE })
+  const revokedAcl = createTestAcl({ secret, service: serviceName, status: AclStatus.REVOKED })
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule]
+    })
+      .overrideProvider(PubSubService)
+      .useValue({
+        sendMessageToTopic: jest.fn().mockResolvedValue(() => {
+          return true
+        })
+      })
+      .compile()
+
+    app = moduleFixture.createNestApplication()
+    app.connectMicroservice(getGrpcOptions('localhost:5001'))
+    await app.startAllMicroservices()
+    await app.init()
+    UserModel = await app.get(getModelToken(User.name))
+    AclModel = await app.get(getModelToken(Acl.name))
+
+    await AclModel.create(activeAcl)
+    await AclModel.create(revokedAcl)
+    createdUser = await UserModel.create({ ...signUpInput })
+    payload = { id: createdUser.id }
+
+    const proto = ProtoLoader.loadSync(
+      join(__dirname, '../src/modules/grpc/user/proto/user.proto')
+    ) as any
+
+    protoGRPC = GRPC.loadPackageDefinition(proto) as any
+
+    client = new protoGRPC.user.UserGrpcService('localhost:5001', GRPC.credentials.createInsecure())
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  describe('grpc test - getUserById', () => {
+    const now = Date.now()
+    it('should throw error if provided metadata is not sufficient', () => {
+      return new Promise<void>(resolve => {
+        client.getUserById(payload, (err, response) => {
+          expect(response).toBeUndefined()
+          expect(err.message).toContain('Metadata is not sufficient!')
+          resolve()
+        })
+      })
+    })
+    it('should return user correctly if provided metadata is sufficient', () => {
+      const metadata = new GRPC.Metadata()
+      metadata.add(
+        'X-FIREFLIES-SIGNATURE',
+        generateSignature(activeAcl.client_id, secret, now.toString(), payload)
+      )
+      metadata.add('X-FIREFLIES-SERVICE', serviceName)
+      metadata.add('X-FIREFLIES-REQUEST-TIMESTAMP', now.toString())
+
+      return new Promise<void>(resolve => {
+        client.getUserById(payload, metadata, (err, response) => {
+          expect(err).toBeNull()
+          expect(response.data.email).toContain(createdUser.email)
+          resolve()
+        })
+      })
+    })
+    it('should return error correctly if message appears to have been sent more than 5 mins ago', () => {
+      const past = moment().subtract(10, 'minutes').toDate().getMilliseconds().toString()
+      const metadata = new GRPC.Metadata()
+      metadata.add(
+        'X-FIREFLIES-SIGNATURE',
+        generateSignature(activeAcl.client_id, secret, past, payload)
+      )
+      metadata.add('X-FIREFLIES-SERVICE', serviceName)
+      metadata.add('X-FIREFLIES-REQUEST-TIMESTAMP', past)
+
+      return new Promise<void>(resolve => {
+        client.getUserById(payload, metadata, (err, response) => {
+          expect(err).not.toBeNull()
+          expect(response).toBeUndefined()
+          expect(err.message).toContain('Message appears to have been sent more than 5 mins ago')
+          resolve()
+        })
+      })
+    })
+    it('should return 400 if requested service does not have access', () => {
+      const metadata = new GRPC.Metadata()
+      metadata.add(
+        'X-FIREFLIES-SIGNATURE',
+        generateSignature(activeAcl.client_id, secret, now.toString(), payload)
+      )
+      metadata.add('X-FIREFLIES-SERVICE', 'unauthorized-service')
+      metadata.add('X-FIREFLIES-REQUEST-TIMESTAMP', now.toString())
+
+      return new Promise<void>(resolve => {
+        client.getUserById(payload, metadata, (err, response) => {
+          expect(err).not.toBeNull()
+          expect(response).toBeUndefined()
+          expect(err.message).toContain('Invalid service access')
+          resolve()
+        })
+      })
+    })
+    it('should return 400 if signture is not valid', () => {
+      const metadata = new GRPC.Metadata()
+      metadata.add(
+        'X-FIREFLIES-SIGNATURE',
+        generateSignature(activeAcl.client_id, secret, 'invalid-hash', payload)
+      )
+      metadata.add('X-FIREFLIES-SERVICE', serviceName)
+      metadata.add('X-FIREFLIES-REQUEST-TIMESTAMP', now.toString())
+
+      return new Promise<void>(resolve => {
+        client.getUserById(payload, metadata, (err, response) => {
+          expect(err).not.toBeNull()
+          expect(response).toBeUndefined()
+          expect(err.message).toContain('Signature verification failed!')
+          resolve()
+        })
+      })
+    })
+    it('should return 400 if requested client is revoked', () => {
+      const metadata = new GRPC.Metadata()
+      metadata.add(
+        'X-FIREFLIES-SIGNATURE',
+        generateSignature(revokedAcl.client_id, secret, now.toString(), payload)
+      )
+      metadata.add('X-FIREFLIES-SERVICE', serviceName)
+      metadata.add('X-FIREFLIES-REQUEST-TIMESTAMP', now.toString())
+
+      return new Promise<void>(resolve => {
+        client.getUserById(payload, metadata, (err, response) => {
+          expect(err).not.toBeNull()
+          expect(response).toBeUndefined()
+          expect(err.message).toContain('Client has been revoked!')
+          resolve()
+        })
+      })
+    })
+  })
+})
